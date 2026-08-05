@@ -21,16 +21,40 @@ export default function App() {
     activePostId,
     setActivePostId,
     setAIPanelOpen,
+    lastAction,
+    setLastAction,
   } = useStore();
 
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [toast, setToast] = useState(null);
+  const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('contentflow_key');
     if (saved) setApiKey(saved);
+
+    const savedState = localStorage.getItem('contentflow_state');
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed.posts?.length) {
+          useStore.setState({ posts: parsed.posts, lastAction: parsed.lastAction || null });
+        }
+      } catch (err) {
+        console.warn('Failed to load saved content calendar state', err);
+      }
+    }
+
+    fetchScheduledPosts();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('contentflow_state', JSON.stringify({ posts, lastAction }));
+  }, [posts, lastAction]);
 
   const saveApiKey = (k) => {
     setApiKey(k);
@@ -41,6 +65,65 @@ export default function App() {
   const showToast = (msg, type = 's') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const fetchScheduledPosts = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/calendar/posts`);
+      const data = await res.json();
+      if (data.ok) {
+        setScheduledPosts(data.posts || []);
+        setSyncStatus(`Loaded ${data.posts?.length || 0} scheduled posts from backend.`);
+      } else {
+        setSyncStatus('Could not load scheduled posts from backend.');
+      }
+    } catch (err) {
+      console.warn('[Calendar] fetch scheduled posts failed:', err);
+      setSyncStatus('Backend unavailable for calendar sync.');
+    }
+  };
+
+  const resolveScheduledAt = (post) => {
+    const day = DAYS.find((d) => d.id === post.columnId);
+    const time = post.time || '10:00 AM';
+    if (day?.date && post.columnId !== 'ideas') {
+      return new Date(`2026 ${day.date} ${time}`).toISOString();
+    }
+    return new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  };
+
+  const handleSyncToBackend = async () => {
+    if (!posts.length) return;
+    setIsSyncing(true);
+    setSyncStatus('Syncing planner to backend scheduler...');
+
+    try {
+      const syncResults = await Promise.all(posts.map(async (post) => {
+        const payload = {
+          id: post.id,
+          platform: post.platforms?.[0] || 'li',
+          content: post.content,
+          mediaUrl: post.mediaUrl || null,
+          scheduledAt: resolveScheduledAt(post),
+        };
+        const res = await fetch(`${BACKEND_URL}/api/calendar/schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        return res.json();
+      }));
+
+      const succeeded = syncResults.filter(r => r.ok).length;
+      setSyncStatus(`Synced ${succeeded} of ${posts.length} posts to backend scheduler.`);
+      fetchScheduledPosts();
+      setLastAction(`Synced ${succeeded} posts with backend scheduler`);
+    } catch (err) {
+      console.error('[Calendar] sync to backend failed:', err);
+      setSyncStatus('Calendar sync failed. Please try again later.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const sensors = useSensors(
@@ -91,6 +174,7 @@ export default function App() {
 
   const handleExportCSV = () => {
     exportCalendarToCSV(posts);
+    setLastAction('Exported the current content calendar to CSV');
     showToast('Exported calendar to CSV!', 'i');
   };
 
@@ -179,7 +263,32 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Calendar Board Grid ── */}
+        <div className="planner-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', margin: '20px 0' }}>
+          <button
+            className="btn btn-purple"
+            onClick={handleSyncToBackend}
+            disabled={isSyncing || !posts.length}
+          >
+            {isSyncing ? 'Syncing Planner…' : 'Sync Planner to Backend'}
+          </button>
+          <button
+            className="btn btn-outline"
+            onClick={fetchScheduledPosts}
+          >
+            Refresh Scheduled Posts
+          </button>
+          {scheduledPosts.length > 0 && (
+            <span style={{ color: 'var(--text-2)', fontSize: '.92rem' }}>
+              {scheduledPosts.length} posts currently registered with backend scheduler.
+            </span>
+          )}
+        </div>
+
+      <div className="planner-status">
+        <span className="status-dot" />
+        {syncStatus || lastAction || 'Your latest planner changes will show up here.'}
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}

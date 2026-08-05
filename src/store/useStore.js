@@ -57,16 +57,19 @@ export const useStore = create((set, get) => ({
   activePostId: null,
   previewPost: null,
   isAIPanelOpen: false,
+  lastAction: null,
 
   setActivePostId: (id) => set({ activePostId: id }),
   setPreviewPost: (post) => set({ previewPost: post }),
   setAIPanelOpen: (open) => set({ isAIPanelOpen: open }),
+  setLastAction: (message) => set({ lastAction: message }),
 
   movePost: (postId, targetColumnId) => {
     set((state) => ({
       posts: state.posts.map((p) =>
         p.id === postId ? { ...p, columnId: targetColumnId } : p
       ),
+      lastAction: `Moved post to ${DAYS.find((d) => d.id === targetColumnId)?.name || targetColumnId}`,
     }));
   },
 
@@ -83,18 +86,21 @@ export const useStore = create((set, get) => ({
         },
         ...state.posts,
       ],
+      lastAction: `Added a new draft for ${DAYS.find((d) => d.id === (newPost.columnId || 'ideas'))?.name || 'the backlog'}`,
     }));
   },
 
   updatePost: (id, updatedFields) => {
     set((state) => ({
       posts: state.posts.map((p) => (p.id === id ? { ...p, ...updatedFields } : p)),
+      lastAction: 'Updated post details',
     }));
   },
 
   deletePost: (id) => {
     set((state) => ({
       posts: state.posts.filter((p) => p.id !== id),
+      lastAction: 'Removed a post from the plan',
     }));
   },
 }));

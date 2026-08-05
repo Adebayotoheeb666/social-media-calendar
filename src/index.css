@@ -321,6 +321,29 @@ body {
 .toast.i { border-left: 3px solid var(--purple); }
 @keyframes toastIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
 
+/* ── Planner status ── */
+.planner-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 24px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(124,58,237,.08);
+  border: 1px solid rgba(124,58,237,.16);
+  color: var(--text-2);
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--purple);
+  box-shadow: 0 0 0 4px rgba(124,58,237,.14);
+}
+
 /* ── CTA ── */
 .cta {
   margin-top: 64px; border-radius: var(--radius-xl); padding: 52px;
